@@ -49,7 +49,9 @@ v5 **fails loudly** (non-zero exit code) instead of silently reporting
 * a `theorem`/`lemma` parses without a proof body at all, which indicates
   parse damage in the file.
 
-Regression tests live in `SigTest/` (`SigTest/run.sh`).
+Regression tests live in `CertleTest/` (`CertleTest/run.sh`).  They run the
+executable against fixtures in a scratch Lake project under `/tmp/certle-test`,
+which is the only place that depends on Mathlib; `certle` itself does not.
 -/
 
 open Lean Elab Meta
@@ -357,7 +359,7 @@ def setupSearchPath : IO Unit := do
   let mut d ← IO.currentDir
   let mut root? : Option System.FilePath := none
   for _ in [:15] do
-    if (← (d / "lakefile.lean").pathExists) then
+    if (← (d / "lakefile.lean").pathExists) || (← (d / "lakefile.toml").pathExists) then
       root? := some d
       break
     if let some parent := d.parent then
@@ -451,6 +453,9 @@ end ReplaceTheoremProofsRflV5
 /-- `CertleExe FILE.lean` (exactly one file). -/
 unsafe def main (args : List String) : IO UInt32 := do
   enableInitializersExecution
+  -- The compiled executable is not run through Lean's driver, so it has to
+  -- initialize the search path itself; `lean --run` already did this.
+  initSearchPath (← findSysroot)
   ReplaceTheoremProofsRflV5.setupSearchPath
   match args with
   | [fileName] => return ← ReplaceTheoremProofsRflV5.runInPlace fileName

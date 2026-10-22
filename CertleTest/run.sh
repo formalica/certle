@@ -3,6 +3,15 @@
 #
 #   CertleTest/run.sh
 #
+# The `certle` project itself has no Mathlib dependency.  These tests do need
+# Mathlib (some fixtures import it and use `@[simps]`), so they run in a scratch
+# Lake project at `/tmp/certle-test` that requires Mathlib.  The fixtures are
+# copied into that project before each run and the executable is invoked from
+# there, with Lake's environment exported so Mathlib's search path is visible.
+#
+# Override the scratch directory or the pinned Mathlib revision with
+# `CERTLE_TEST_DIR` / `MATHLIB_REV`.
+#
 # Covers the two reported issues:
 #   1. equation-style declarations whose statement ends in a `do` block
 #      (the `mmap_cons` / unexpected-doc-comment-token crash), and
@@ -10,16 +19,70 @@
 #      `Mathlib/Order/Bounds/OrderIso.lean` silent `replaced 0` case),
 #      which must now fail loudly instead of exiting 0.
 #
-# Fixtures are copied into CertleTest/work/ first because v4 rewrites its
-# input file in place, and because `lake env lean` only accepts input
-# files inside the project root.
+# Fixtures are copied into the scratch project's `work/` directory first
+# because v4 rewrites its input file in place.
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
-V4="lake env lean --run CertleExe.lean"
-V5="lake env lean --run CertleExe.lean"
-WORK="CertleTest/work"
-FIX="CertleTest/fixtures"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+TEST_DIR="${CERTLE_TEST_DIR:-/tmp/certle-test}"
+MATHLIB_REV="${MATHLIB_REV:-c20717eaa791af9dd3f7847f5ba91623bda9ab6b}"
+CERTLE_BIN="$ROOT/.lake/build/bin/certle"
+WORK="$TEST_DIR/work"
+WORK_REL="work"
+FIX="$ROOT/CertleTest/fixtures"
+
+########################################################################
+# Build `certle` in its own Mathlib-free Lake project.  Running the compiled
+# binary is much faster than `lean --run CertleExe.lean` once per test.
+########################################################################
+( cd "$ROOT" && lake build Certle certle )
+
+########################################################################
+# Create (or refresh) the scratch project that provides Mathlib.
+########################################################################
+if [ -d "$TEST_DIR/.lake/packages/mathlib" ]; then
+  echo "using existing Mathlib checkout in $TEST_DIR"
+else
+  echo "creating Mathlib test project in $TEST_DIR"
+fi
+mkdir -p "$TEST_DIR"
+cat > "$TEST_DIR/lakefile.toml" <<EOF
+name = "certletest"
+version = "0.1.0"
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "$MATHLIB_REV"
+EOF
+cp "$ROOT/lean-toolchain" "$TEST_DIR/lean-toolchain"
+
+cd "$TEST_DIR"
+# On a warm checkout the manifest and Mathlib sources are already there; only
+# refresh the package state when they are missing or pinned to another rev.
+if [ ! -d .lake/packages/mathlib ] \
+   || [ ! -f lake-manifest.json ] \
+   || ! grep -q "\"rev\": \"$MATHLIB_REV\"" lake-manifest.json; then
+  lake update
+fi
+
+# Make sure the Mathlib oleans used by the fixtures are available before the
+# tests run.  On a fresh project prefer Mathlib's prebuilt cache; fall back to
+# building just the needed modules when the cache is unavailable.
+MATHLIB_LIB="$TEST_DIR/.lake/packages/mathlib/.lake/build/lib/lean"
+if [ ! -f "$MATHLIB_LIB/Mathlib/Init.olean" ] \
+   || [ ! -f "$MATHLIB_LIB/Mathlib/Tactic/Simps/Basic.olean" ]; then
+  lake exe cache get || echo "warning: Mathlib cache download failed; building modules" >&2
+  lake build Mathlib.Init Mathlib.Tactic.Simps.Basic
+fi
+
+# Capture Lake's environment once.  Calling `lake env` for every fixture costs
+# about a second per invocation; exporting LEAN_PATH directly keeps warm test
+# runs fast.
+LEAN_PATH="$(lake env printenv LEAN_PATH)"
+LEAN_SYSROOT="$(lean --print-prefix)"
+export LEAN_PATH LEAN_SYSROOT
+
 rm -rf "$WORK"
 mkdir -p "$WORK"
 
@@ -34,7 +97,7 @@ run_v4 () {
   local name="$1"
   cp "$FIX/$name" "$WORK/$name"
   set +e
-  log="$($V4 "$WORK/$name" 2>&1)"
+  log="$("$CERTLE_BIN" "$WORK_REL/$name" 2>&1)"
   status=$?
   set -e
 }
@@ -44,7 +107,7 @@ run_v5 () {
   local name="$1"
   cp "$FIX/$name" "$WORK/$name"
   set +e
-  log="$($V5 "$WORK/$name" 2>&1)"
+  log="$("$CERTLE_BIN" "$WORK_REL/$name" 2>&1)"
   status=$?
   set -e
 }
@@ -74,7 +137,7 @@ if grep -q 'theorem afterDoBlock (n : Nat) : n = n := rfl' "$WORK/DoBlockEquatio
 else
   no "DoBlockEquation: following declaration damaged"
 fi
-if lake env lean "$WORK/DoBlockEquation.lean" >/dev/null 2>&1; then
+if lean "$WORK_REL/DoBlockEquation.lean" >/dev/null 2>&1; then
   ok "DoBlockEquation: rewritten file still compiles"
 else
   no "DoBlockEquation: rewritten file does not compile"
@@ -122,7 +185,7 @@ if grep -q 'theorem keepRfl (n : Nat) : n = n := rfl' "$WORK/OrderIsoShape.lean"
 else
   no "OrderIsoShape: keepRfl was modified"
 fi
-if lake env lean "$WORK/OrderIsoShape.lean" >/dev/null 2>&1; then
+if lean "$WORK_REL/OrderIsoShape.lean" >/dev/null 2>&1; then
   ok "OrderIsoShape: rewritten file still compiles"
 else
   no "OrderIsoShape: rewritten file does not compile"
@@ -135,7 +198,7 @@ fi
 cp "$FIX/BadImport.lean" "$WORK/BadImport.lean"
 before="$(cksum < "$WORK/BadImport.lean")"
 set +e
-log="$(lake env lean --run CertleExe.lean "$WORK/BadImport.lean" 2>&1)"
+log="$("$CERTLE_BIN" "$WORK_REL/BadImport.lean" 2>&1)"
 status=$?
 set -e
 after="$(cksum < "$WORK/BadImport.lean")"
@@ -159,9 +222,9 @@ fi
 # Test 4: CLI contract — exactly one input file (from the earlier fix).
 ########################################################################
 set +e
-log="$(lake env lean --run CertleExe.lean 2>&1)"
+log="$("$CERTLE_BIN" 2>&1)"
 status0=$?
-log="$(lake env lean --run CertleExe.lean a.lean b.lean 2>&1)"
+log="$("$CERTLE_BIN" a.lean b.lean 2>&1)"
 status2=$?
 set -e
 if [ $status0 -ne 0 ] && [ $status2 -ne 0 ]; then
@@ -200,7 +263,7 @@ if grep -qE 'theorem.*where|exact h\.mp|exact h\.mpr' "$WORK/WhereStructure.lean
 else
   ok "WhereStructure: original theorem where and branch bodies removed"
 fi
-if lake env lean "$WORK/WhereStructure.lean" >/dev/null 2>&1; then
+if lean "$WORK_REL/WhereStructure.lean" >/dev/null 2>&1; then
   ok "WhereStructure: rewritten file still compiles"
 else
   no "WhereStructure: rewritten file does not compile"
@@ -235,7 +298,7 @@ if grep -qE 'theorem parentStructShape \(α : Type\) : ChildProp α +:= by sorry
 else
   no "WhereParent: whole where was not replaced with ':= by sorry'"
 fi
-if lake env lean "$WORK/WhereParent.lean" >/dev/null 2>&1; then
+if lean "$WORK_REL/WhereParent.lean" >/dev/null 2>&1; then
   ok "WhereParent: rewritten file still compiles"
 else
   no "WhereParent: rewritten file does not compile"
@@ -270,7 +333,7 @@ if [ "$(grep -c '| _ => sorry' "$WORK/MultiArmEquation.lean")" -eq 2 ]; then
 else
   no "MultiArmEquation: expected 2 '| _ => sorry' occurrences"
 fi
-if lake env lean "$WORK/MultiArmEquation.lean" >/dev/null 2>&1; then
+if lean "$WORK_REL/MultiArmEquation.lean" >/dev/null 2>&1; then
   ok "MultiArmEquation: rewritten file still compiles"
 else
   no "MultiArmEquation: rewritten file does not compile"
@@ -311,7 +374,7 @@ if grep -qE 'theorem regularTheorem \(n : Nat\) : n \+ 0 = n +:= by sorry' "$WOR
 else
   no "SimpsLemma: regular theorem was not replaced with ':= by sorry'"
 fi
-if lake env lean "$WORK/SimpsLemma.lean" >/dev/null 2>&1; then
+if lean "$WORK_REL/SimpsLemma.lean" >/dev/null 2>&1; then
   ok "SimpsLemma: rewritten file compiles without simps error"
 else
   no "SimpsLemma: rewritten file failed to compile"
@@ -353,7 +416,7 @@ if grep -qE 'theorem regularTheorem \(n : Nat\) : n \+ 0 = n +:= by sorry' "$WOR
 else
   no "QuotationPattern: regular theorem was not replaced with ':= by sorry'"
 fi
-if lake env lean "$WORK/QuotationPattern.lean" >/dev/null 2>&1; then
+if lean "$WORK_REL/QuotationPattern.lean" >/dev/null 2>&1; then
   ok "QuotationPattern: rewritten file still compiles"
 else
   no "QuotationPattern: rewritten file failed to compile"
