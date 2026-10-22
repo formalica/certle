@@ -79,7 +79,7 @@ fi
 # Capture Lake's environment once.  Calling `lake env` for every fixture costs
 # about a second per invocation; exporting LEAN_PATH directly keeps warm test
 # runs fast.
-LEAN_PATH="$(lake env printenv LEAN_PATH)"
+LEAN_PATH="$ROOT/.lake/build/lib/lean:$(lake env printenv LEAN_PATH)"
 LEAN_SYSROOT="$(lean --print-prefix)"
 export LEAN_PATH LEAN_SYSROOT
 
@@ -127,8 +127,8 @@ if echo "$log" | grep -q 'replaced 1 proof(s)'; then
 else
   no "DoBlockEquation: expected 'replaced 1 proof(s)', got: $log"
 fi
-if grep -qE '\| _ => (by )?sorry' "$WORK/DoBlockEquation.lean"; then
-  ok "DoBlockEquation: arm body replaced with sorry"
+if grep -q '_root_\.Certle\.certleAx' "$WORK/DoBlockEquation.lean"; then
+  ok "DoBlockEquation: arm body replaced with Certle axiom"
 else
   no "DoBlockEquation: arm body was not replaced"
 fi
@@ -168,7 +168,7 @@ else
   no "OrderIsoShape: expected 'replaced 3 proof(s), kept 1', got: $log"
 fi
 for thm in addCommIff leAddRight mulTwoEq; do
-  if grep "theorem $thm" "$WORK/OrderIsoShape.lean" | grep -q 'by sorry'; then
+  if grep "theorem $thm" "$WORK/OrderIsoShape.lean" | grep -q '_root_\.Certle\.certleAx'; then
     ok "OrderIsoShape: $thm replaced"
   else
     no "OrderIsoShape: $thm was not replaced"
@@ -189,6 +189,15 @@ if lean "$WORK_REL/OrderIsoShape.lean" >/dev/null 2>&1; then
   ok "OrderIsoShape: rewritten file still compiles"
 else
   no "OrderIsoShape: rewritten file does not compile"
+fi
+# The replacement proof must be attributed to Certle.certleAx, not sorryAx.
+cp "$WORK/OrderIsoShape.lean" "$WORK/OrderIsoShapeAxioms.lean"
+printf '\n#print axioms SigOrderIso.addCommIff\n' >> "$WORK/OrderIsoShapeAxioms.lean"
+log="$(lean "$WORK_REL/OrderIsoShapeAxioms.lean" 2>&1)"
+if echo "$log" | grep -q 'Certle.certleAx' && ! echo "$log" | grep -q 'sorryAx'; then
+  ok "OrderIsoShape: replacement is attributed to Certle.certleAx"
+else
+  no "OrderIsoShape: replacement does not use Certle.certleAx; output: $log"
 fi
 
 ########################################################################
@@ -235,7 +244,7 @@ fi
 
 ########################################################################
 # Test 5: `where` declarations with branches (toCompleteDistribLattice shape)
-# Replaced whole with ` := by sorry`.
+# Replaced whole with ` := _root_.Certle.certleAx _`.
 ########################################################################
 run_v4 WhereStructure.lean
 if [ $status -ne 0 ]; then
@@ -248,13 +257,13 @@ if echo "$log" | grep -q 'replaced 2 proof(s)'; then
 else
   no "WhereStructure: expected 'replaced 2 proof(s)', got: $log"
 fi
-if grep -qE 'theorem toCompleteDistribLatticeShape \(α : Type\) : MyMinimalAxioms α +:= by sorry' "$WORK/WhereStructure.lean"; then
-  ok "WhereStructure: toCompleteDistribLatticeShape whole where replaced with ':= by sorry'"
+if grep -qE 'theorem toCompleteDistribLatticeShape \(α : Type\) : MyMinimalAxioms α +:= _root_\.Certle\.certleAx _' "$WORK/WhereStructure.lean"; then
+  ok "WhereStructure: toCompleteDistribLatticeShape replaced with Certle axiom"
 else
   no "WhereStructure: toCompleteDistribLatticeShape was not replaced correctly"
 fi
-if grep -qE 'theorem spanSingletonShape \(p q : Prop\) \(h : p ↔ q\) : p ↔ q +:= by sorry' "$WORK/WhereStructure.lean"; then
-  ok "WhereStructure: spanSingletonShape whole where replaced with ':= by sorry'"
+if grep -qE 'theorem spanSingletonShape \(p q : Prop\) \(h : p ↔ q\) : p ↔ q +:= _root_\.Certle\.certleAx _' "$WORK/WhereStructure.lean"; then
+  ok "WhereStructure: spanSingletonShape replaced with Certle axiom"
 else
   no "WhereStructure: spanSingletonShape was not replaced correctly"
 fi
@@ -280,7 +289,7 @@ fi
 
 ########################################################################
 # Test 6: `where` declarations with parent extensions (`__ := ...`)
-# Falls back to replacing the whole `where` with ` := by sorry`.
+# Falls back to replacing the whole `where` with the Certle axiom.
 ########################################################################
 run_v4 WhereParent.lean
 if [ $status -ne 0 ]; then
@@ -293,10 +302,10 @@ if echo "$log" | grep -q 'replaced 1 proof(s)'; then
 else
   no "WhereParent: expected 'replaced 1 proof(s)', got: $log"
 fi
-if grep -qE 'theorem parentStructShape \(α : Type\) : ChildProp α +:= by sorry' "$WORK/WhereParent.lean"; then
-  ok "WhereParent: whole where replaced with ':= by sorry'"
+if grep -qE 'theorem parentStructShape \(α : Type\) : ChildProp α +:= _root_\.Certle\.certleAx _' "$WORK/WhereParent.lean"; then
+  ok "WhereParent: whole where replaced with Certle axiom"
 else
-  no "WhereParent: whole where was not replaced with ':= by sorry'"
+  no "WhereParent: whole where was not replaced with the Certle axiom"
 fi
 if lean "$WORK_REL/WhereParent.lean" >/dev/null 2>&1; then
   ok "WhereParent: rewritten file still compiles"
@@ -315,7 +324,7 @@ fi
 
 ########################################################################
 # Test 7: Multi-arm equation declarations
-# Replaced with single `| _ => sorry` arm.
+# Replaced with a single `| _ => _root_.Certle.certleAx _` arm.
 ########################################################################
 run_v4 MultiArmEquation.lean
 if [ $status -ne 0 ]; then
@@ -328,10 +337,10 @@ if echo "$log" | grep -q 'replaced 2 proof(s)'; then
 else
   no "MultiArmEquation: expected 'replaced 2 proof(s)', got: $log"
 fi
-if [ "$(grep -c '| _ => sorry' "$WORK/MultiArmEquation.lean")" -eq 2 ]; then
-  ok "MultiArmEquation: both declarations replaced with single '| _ => sorry' arm"
+if [ "$(grep -c '| _ => _root_\.Certle\.certleAx _' "$WORK/MultiArmEquation.lean")" -eq 2 ]; then
+  ok "MultiArmEquation: both declarations replaced with a single Certle-axiom arm"
 else
-  no "MultiArmEquation: expected 2 '| _ => sorry' occurrences"
+  no "MultiArmEquation: expected 2 Certle-axiom arms"
 fi
 if lean "$WORK_REL/MultiArmEquation.lean" >/dev/null 2>&1; then
   ok "MultiArmEquation: rewritten file still compiles"
@@ -369,10 +378,10 @@ if grep -q 'lemma simpsLemmaWithWhere' "$WORK/SimpsLemma.lean" && \
 else
   no "SimpsLemma: simps lemma proof was modified"
 fi
-if grep -qE 'theorem regularTheorem \(n : Nat\) : n \+ 0 = n +:= by sorry' "$WORK/SimpsLemma.lean"; then
-  ok "SimpsLemma: regular theorem replaced with ':= by sorry'"
+if grep -qE 'theorem regularTheorem \(n : Nat\) : n \+ 0 = n +:= _root_\.Certle\.certleAx _' "$WORK/SimpsLemma.lean"; then
+  ok "SimpsLemma: regular theorem replaced with Certle axiom"
 else
-  no "SimpsLemma: regular theorem was not replaced with ':= by sorry'"
+  no "SimpsLemma: regular theorem was not replaced with the Certle axiom"
 fi
 if lean "$WORK_REL/SimpsLemma.lean" >/dev/null 2>&1; then
   ok "SimpsLemma: rewritten file compiles without simps error"
@@ -411,10 +420,10 @@ if grep -q 'def renameTheorem' "$WORK/QuotationPattern.lean" && \
 else
   no "QuotationPattern: definition or quotation patterns damaged"
 fi
-if grep -qE 'theorem regularTheorem \(n : Nat\) : n \+ 0 = n +:= by sorry' "$WORK/QuotationPattern.lean"; then
-  ok "QuotationPattern: regular theorem replaced with ':= by sorry'"
+if grep -qE 'theorem regularTheorem \(n : Nat\) : n \+ 0 = n +:= _root_\.Certle\.certleAx _' "$WORK/QuotationPattern.lean"; then
+  ok "QuotationPattern: regular theorem replaced with Certle axiom"
 else
-  no "QuotationPattern: regular theorem was not replaced with ':= by sorry'"
+  no "QuotationPattern: regular theorem was not replaced with the Certle axiom"
 fi
 if lean "$WORK_REL/QuotationPattern.lean" >/dev/null 2>&1; then
   ok "QuotationPattern: rewritten file still compiles"

@@ -1,3 +1,5 @@
+import Certle
+
 /-!
 # Regression fixture: namespaced theorems with attributes (the OrderIso shape)
 

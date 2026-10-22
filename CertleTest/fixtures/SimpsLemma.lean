@@ -1,4 +1,5 @@
 import Mathlib.Tactic.Simps.Basic
+import Certle
 
 /-!
 # Regression fixture: lemma declared with @[simps]
@@ -6,7 +7,7 @@ import Mathlib.Tactic.Simps.Basic
 Mirrors `affine_combination` in
 `Mathlib/Geometry/Manifold/VectorBundle/CovariantDerivative/Basic.lean`.
 v5 must skip theorems/lemmas declared with `simps`, keeping their original proof,
-so that @[simps] does not fail due to a sorry body.
+so that @[simps] does not fail due to a replaced body.
 -/
 
 structure MyPropStruct (p q : Prop) : Prop where
@@ -19,6 +20,6 @@ lemma simpsLemmaWithWhere (p q : Prop) (hp : p) (hq : q) : MyPropStruct p q wher
   hp := hp
   hq := hq
 
-/-- A regular theorem without `@[simps]` in the same file should still be replaced by sorry. -/
+/-- A regular theorem without `@[simps]` in the same file should still be replaced. -/
 theorem regularTheorem (n : Nat) : n + 0 = n := by
   omega

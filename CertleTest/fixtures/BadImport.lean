@@ -7,6 +7,7 @@ then fails to parse and every theorem loses its proof-body node.  This
 fixture imports a module that certainly does not exist; v4 must exit
 non-zero and leave the file untouched.
 -/
+import Certle
 import CertleTest.DefinitelyDoesNotExist
 
 theorem wouldOtherwiseBeReplaced (n : Nat) : n + 0 = n := by

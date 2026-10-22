@@ -27,16 +27,22 @@ Passing zero files, or more than one file, is an error (exit code 1).
 Loading and elaborating a single file at a time keeps imports, environments,
 and initializer state predictable: one process, one file, one result line.
 
+Replaced proofs use the public axiom `Certle.certleAx` from `Certle.lean`
+instead of `sorry`.  The axiom is assumed to be reachable from the processed
+file (for example through the surrounding project's imports); no imports are
+inserted or rewritten.
+
 Equation-style declarations (`| pat => body`) are replaced with a single
-wildcard arm `| _ => sorry`.  This works uniformly whether the declaration
-originally has one arm (such as `mmap_cons` in `Mathlib/Data/Vector/Basic.lean`)
-or many arms (such as `map_add_zsmul` in `Mathlib/Algebra/AddConstMap/Basic.lean`),
-eliminating complex pattern matching while correctly terminating layout-sensitive
-`do` blocks in signatures.
+wildcard arm `| _ => _root_.Certle.certleAx _`.  This works uniformly whether
+the declaration originally has one arm (such as `mmap_cons` in
+`Mathlib/Data/Vector/Basic.lean`) or many arms (such as `map_add_zsmul` in
+`Mathlib/Algebra/AddConstMap/Basic.lean`), eliminating complex pattern matching
+while correctly terminating layout-sensitive `do` blocks in signatures.
 
 Declarations using `where` (such as `toCompleteDistribLattice` in
 `Mathlib/Order/CompleteBooleanAlgebra.lean` or `span_singleton_eq_one_iff` in
-`Mathlib/Algebra/Algebra/Operations.lean`) are replaced whole with ` := by sorry`.
+`Mathlib/Algebra/Algebra/Operations.lean`) are replaced whole with
+` := _root_.Certle.certleAx _`.
 
 v5 **fails loudly** (non-zero exit code) instead of silently reporting
 `replaced 0 proof(s)` when
@@ -59,10 +65,10 @@ open Lean Elab Meta
 namespace ReplaceTheoremProofsRflV5
 
 /-- The text that replaces a non-reflexive `declValSimple` right-hand side. -/
-def defaultBody : String := " := by sorry"
+def defaultBody : String := " := _root_.Certle.certleAx _"
 
 /-- The text that replaces an equation declaration's arms (one wildcard arm). -/
-def eqnArmBody : String := "| _ => sorry"
+def eqnArmBody : String := "| _ => _root_.Certle.certleAx _"
 
 /-- Node kinds that form the right-hand side of a declaration. -/
 def isTheoremRhsNode (stx : Syntax) : Bool :=
@@ -245,11 +251,9 @@ def mkEdit? (fileMap : FileMap) (newText : String) (stx : Syntax) : Option Lsp.T
   let range ← stx.getRange? (canonicalOnly := true)
   return { range := fileMap.utf8RangeToLspRange range, newText := newText }
 
-/-- Has this equation right-hand side already been replaced with `| _ => sorry`? -/
+/-- Has this equation right-hand side already been replaced with the Certle arm? -/
 def isEqnAlreadyReplaced? (src : String) (rhs : Syntax) : Bool :=
-  (bodyText? src rhs).any fun text =>
-    let norm := normalizeBody text
-    norm == "|=>sorry" || norm == "|=>bysorry" || norm.endsWith "|=>sorry" || norm.endsWith "|=>bysorry"
+  isAlreadyReplaced? eqnArmBody src rhs
 
 /-- What `collect` accumulates while walking the commands of one file. -/
 structure Acc where
@@ -270,11 +274,12 @@ A declaration with `@[simps]` bumps `keptSimps` and produces no edit.
 A declaration accepted by `isRflDecl` bumps `keptRfl` and produces no edit.
 
 Simple right-hand sides (`declValSimple`) and structure instances
-(`whereStructInst`) are replaced whole with `defaultBody` (` := by sorry`).
+(`whereStructInst`) are replaced whole with `defaultBody`
+(` := _root_.Certle.certleAx _`).
 
 Equation right-hand sides (`declValEqns`) are replaced with a single
-arm `armBody` (`| _ => sorry`), collapsing multiple arms and preserving
-the layout indentation before `|`.
+arm `armBody` (`| _ => _root_.Certle.certleAx _`), collapsing multiple arms
+and preserving the layout indentation before `|`.
 -/
 partial def collect (src : String) (fileMap : FileMap) (body armBody : String)
     (env : Environment) (mainModule : Name) (currNamespace : Name)

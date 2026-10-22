@@ -1,10 +1,12 @@
+import Certle
+
 /-!
 # Regression fixture: declarations using `where` with branches
 
 Mirrors `toCompleteDistribLattice` in `Mathlib/Order/CompleteBooleanAlgebra.lean`
 and `span_singleton_eq_one_iff` in `Mathlib/Algebra/Algebra/Operations.lean`.
-v4 must replace the entire `where` block and its branches with `:= by sorry`,
-and the rewritten file must still compile.
+v4 must replace the entire `where` block and its branches with the Certle
+axiom, and the rewritten file must still compile.
 -/
 
 structure MyMinimalAxioms (α : Type) where

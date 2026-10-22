@@ -1,10 +1,12 @@
+import Certle
+
 /-!
 # Regression fixture: `where` declarations containing parent structure extensions
 
 Mirrors `Function.completeDistribLatticeMinimalAxioms` in
 `Mathlib/Order/CompleteBooleanAlgebra.lean`.  Parent structure extensions
-(`__ := ...`) cannot be replaced branch-wise with `by sorry`; v4 must fall
-back to replacing the whole `where` and its branches with `:= by sorry`.
+(`__ := ...`) cannot be replaced branch-wise with a proof term; v4 must fall
+back to replacing the whole `where` and its branches with the Certle axiom.
 -/
 
 structure ParentProp (α : Type) : Prop where

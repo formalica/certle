@@ -1,3 +1,5 @@
+import Certle
+
 /-!
 # Regression fixture: equation-style theorem whose statement ends in a `do` block
 
@@ -5,10 +7,9 @@ This is the shape that crashed the first v4 rewrite (the issue reported for
 `Mathlib/Data/Vector/Basic.lean`: unexpected doc-comment token error on the
 declaration *after* `mmap_cons`).  The statement type ends with a
 layout-sensitive `do` block and the value uses equation-style arms
-`| pats => body`.  Replacing the whole `declValEqns` node with
-` := by sorry` does not parse here; v4 must replace each arm body with
-`by sorry` instead, and the doc-commented declaration below must survive
-untouched.
+`| pats => body`.  Replacing the whole `declValEqns` node with a simple term
+does not parse here; v4 must replace the arm body with the Certle axiom
+instead, and the doc-commented declaration below must survive untouched.
 -/
 
 def mmapN {m : Type → Type} [Monad m] (f : Nat → m Nat) : List Nat → m (List Nat)

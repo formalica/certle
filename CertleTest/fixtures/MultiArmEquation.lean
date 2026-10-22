@@ -1,10 +1,12 @@
+import Certle
+
 /-!
 # Regression fixture: equation-style declarations with many arms
 
 Mirrors `map_add_zsmul` in `Mathlib/Algebra/AddConstMap/Basic.lean`
 and `mmap_cons` in `Mathlib/Data/Vector/Basic.lean`.  Declarations with
 multiple arms (or complex pattern-matching arms) must be replaced with
-a single wildcard sorry arm.
+a single wildcard arm using the Certle axiom.
 -/
 
 theorem multiArmShape : ∀ (n : Nat), n + 0 = n
