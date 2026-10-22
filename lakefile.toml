@@ -1,0 +1,15 @@
+name = "certle"
+version = "0.1.0"
+defaultTargets = ["CertleExe"]
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "c20717eaa791af9dd3f7847f5ba91623bda9ab6b"
+
+[[lean_lib]]
+name = "Certle"
+
+[[lean_exe]]
+name = "certle"
+root = "CertleExe"
