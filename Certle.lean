@@ -2,6 +2,7 @@
 Copyright (c) 2026 The certle Authors. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
+module
 
 /-!
 # The `certle` custom axiom
@@ -24,9 +25,9 @@ namespace Certle
 This axiom is what `CertleExe.lean` splices in place of a theorem's original
 proof body.  It is deliberately public and un-derived so that it can be
 detected by name in the `#print axioms` output of a rewritten file. -/
-axiom certleAx (p : Prop) : p
+public axiom certleAx (p : Prop) : p
 
 /-- Public wrapper around `certleAx` for building replacement proof terms. -/
-def certleProof (p : Prop) : p := certleAx p
+public def certleProof (p : Prop) : p := certleAx p
 
 end Certle
